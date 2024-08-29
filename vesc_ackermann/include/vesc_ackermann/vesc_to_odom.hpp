@@ -40,7 +40,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <vesc_msgs/msg/vesc_state_stamped.hpp>
-
+#include <sensor_msgs/msg/imu.hpp>
+// #include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 namespace vesc_ackermann
 {
 
@@ -68,12 +70,14 @@ private:
   // odometry state
   double x_, y_, yaw_;
   Float64::SharedPtr last_servo_cmd_;  ///< Last servo position commanded value
+  double last_yaw_;
   VescStateStamped::SharedPtr last_state_;  ///< Last received state message
 
   // ROS services
   rclcpp::Publisher<Odometry>::SharedPtr odom_pub_;
   rclcpp::Subscription<VescStateStamped>::SharedPtr vesc_state_sub_;
   rclcpp::Subscription<Float64>::SharedPtr servo_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_pub_;
 
   // ROS callbacks
@@ -81,6 +85,8 @@ private:
   void vescStateCallbackV2(const VescStateStamped::SharedPtr state);
 
   void servoCmdCallback(const Float64::SharedPtr servo);
+  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr imu);
+
 };
 
 }  // namespace vesc_ackermann

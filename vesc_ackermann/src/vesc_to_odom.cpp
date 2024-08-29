@@ -35,7 +35,7 @@
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <vesc_msgs/msg/vesc_state_stamped.hpp>
-
+#define DEBUG_FLAG 0
 namespace vesc_ackermann
 {
 
@@ -93,6 +93,8 @@ namespace vesc_ackermann
       servo_sub_ = create_subscription<Float64>(
           "sensors/servo_position_command", 10, std::bind(&VescToOdom::servoCmdCallback, this, _1));
     }
+    imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
+        "/imu", 10, std::bind(&VescToOdom::imuCallback, this, _1));
   }
 
   void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
@@ -104,7 +106,7 @@ namespace vesc_ackermann
     }
 
     // convert to engineering units
-    double current_speed = (-state->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
+    double current_speed = -(-state->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
     if (std::fabs(current_speed) < 0.05)
     {
       current_speed = 0.0;
@@ -210,7 +212,7 @@ namespace vesc_ackermann
     auto dt = rclcpp::Time(state->header.stamp) - rclcpp::Time(last_state_->header.stamp);
 
     // convert to engineering units
-    double current_speed = (-state->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
+    double current_speed = -(-state->state.speed - speed_to_erpm_offset_) / speed_to_erpm_gain_;
     if (std::fabs(current_speed) < 0.05)
     {
       current_speed = 0.0;
@@ -220,27 +222,35 @@ namespace vesc_ackermann
 
     if (use_servo_cmd_)
     {
-      current_steering_angle =
-          (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
-      current_angular_velocity = current_speed * tan(current_steering_angle) / 2 / wheelbase_;
-      yaw_ += delta_x * tan(current_steering_angle) / 2 / wheelbase_;
+      current_steering_angle = 2 * (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
+      current_angular_velocity = current_speed * tan(current_steering_angle) / wheelbase_;
+      yaw_ += current_angular_velocity * dt.seconds();
     }
 
-    if (yaw_ > M_PI){
-      yaw_ -= 2*M_PI;
+    if (yaw_ > M_PI)
+    {
+      yaw_ -= 2 * M_PI;
     }
-    else if (yaw_ < -M_PI){
-      yaw_ += 2*M_PI;
+    else if (yaw_ < -M_PI)
+    {
+      yaw_ += 2 * M_PI;
     }
     /** @todo could probably do better propigating odometry, e.g. trapezoidal integration */
 
     // propigate odometry
     x_ += delta_x * cos(yaw_);
     y_ += delta_x * sin(yaw_);
+    // x_ += delta_x * cos(last_yaw_);
+    // y_ += delta_x * sin(last_yaw_);
     // if (use_servo_cmd_)
     // {
     //   yaw_ += current_angular_velocity * dt.seconds();
     // }
+    if (DEBUG_FLAG)
+    {
+      RCLCPP_INFO(this->get_logger(), "x: %f, y: %f, yaw: %f,\n speed: %f, steering_angle: %f, angular_velocity: %f",
+                  x_, y_, yaw_, current_speed, current_steering_angle, current_angular_velocity);
+    }
 
     // save state for next time
     last_state_ = state;
@@ -258,7 +268,8 @@ namespace vesc_ackermann
     odom.pose.pose.orientation.y = 0.0;
     odom.pose.pose.orientation.z = sin(yaw_ / 2.0);
     odom.pose.pose.orientation.w = cos(yaw_ / 2.0);
-
+    // odom.pose.pose.orientation.z = sin(last_yaw_ / 2.0);
+    // odom.pose.pose.orientation.w = cos(last_yaw_ / 2.0);
     // Position uncertainty
     /** @todo Think about position uncertainty, perhaps get from parameters? */
     odom.pose.covariance[0] = 0.2;  ///< x
@@ -298,6 +309,19 @@ namespace vesc_ackermann
   void VescToOdom::servoCmdCallback(const Float64::SharedPtr servo)
   {
     last_servo_cmd_ = servo;
+  }
+
+  void VescToOdom::imuCallback(const sensor_msgs::msg::Imu::SharedPtr imu)
+  {
+    double roll, pitch, yaw;
+    tf2::Quaternion quat;
+    tf2::fromMsg(imu->orientation, quat);
+    tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+    last_yaw_ = yaw;
+    if (DEBUG_FLAG)
+    {
+      RCLCPP_INFO(this->get_logger(), "yaw: %f", yaw);
+    }
   }
 
 } // namespace vesc_ackermann
