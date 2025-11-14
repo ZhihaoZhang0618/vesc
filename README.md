@@ -19,7 +19,7 @@ This is a ROS2 implementation of the ROS1 driver using the new serial driver loc
 ## Modification
 1. Modify the odometry computation, as the original method causes a speed delay when decelerating from high velocities to a stop.
 2. update duty, current control mode
-
+```
 Speed+steer
 float32 steering_angle
 float32 steering_angle_velocity 0
@@ -47,3 +47,4 @@ float32 steering_angle_velocity 0
 float32 speed 0
 float32 acceleration (duty)
 float32 jerk 3
+```
